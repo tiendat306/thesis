@@ -50,12 +50,19 @@ enum ProductStatus {
   ARCHIVED
 }
 
+enum ActionType {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN_FAILED
+}
+
 //////////////////////
 // RBAC
 //////////////////////
 
 model Role {
-  id   String   @id @default(uuid())
+  id   String   @id @default(uuid()) @db.Uuid
   name RoleName @unique
 
   users       User[]
@@ -67,7 +74,7 @@ model Role {
 }
 
 model Permission {
-  id   String @id @default(uuid())
+  id   String @id @default(uuid()) @db.Uuid
   name String @unique
 
   roles RolePermission[]
@@ -76,8 +83,8 @@ model Permission {
 }
 
 model RolePermission {
-  roleId       String @map("role_id")
-  permissionId String @map("permission_id")
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
 
   role       Role       @relation(fields: [roleId], references: [id])
   permission Permission @relation(fields: [permissionId], references: [id])
@@ -91,25 +98,26 @@ model RolePermission {
 //////////////////////
 
 model User {
-  id       String  @id @default(uuid())
+  id       String  @id @default(uuid()) @db.Uuid
   email    String  @unique
   password String
   fullName String  @map("full_name")
   phone    String?
   avatar   String?
 
-  roleId   String  @map("role_id")
+  roleId   String  @map("role_id") @db.Uuid
   role     Role    @relation(fields: [roleId], references: [id])
   isActive Boolean @default(true) @map("is_active")
 
   addresses     Address[]
+  cart          Cart?
   orders        Order[]
-  cartItems     CartItem[]
   reviews       Review[]
   wishlistItems WishlistItem[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  auditLogs AuditLog[]
 
   @@map("users")
 }
@@ -119,8 +127,8 @@ model User {
 //////////////////////
 
 model Address {
-  id     String @id @default(uuid())
-  userId String @map("user_id")
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
 
   fullName String @map("full_name")
   phone    String
@@ -134,8 +142,7 @@ model Address {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders Order[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("addresses")
 }
@@ -145,13 +152,13 @@ model Address {
 //////////////////////
 
 model Category {
-  id          String  @id @default(uuid())
+  id          String  @id @default(uuid()) @db.Uuid
   name        String
   slug        String  @unique
   description String?
   image       String?
 
-  parentId String?    @map("parent_id")
+  parentId String?    @map("parent_id") @db.Uuid
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
   isActive Boolean    @default(true) @map("is_active")
@@ -165,7 +172,7 @@ model Category {
 }
 
 model Brand {
-  id          String  @id @default(uuid())
+  id          String  @id @default(uuid()) @db.Uuid
   name        String
   slug        String  @unique
   logo        String?
@@ -181,12 +188,12 @@ model Brand {
 }
 
 model Product {
-  id          String        @id @default(uuid())
+  id          String        @id @default(uuid()) @db.Uuid
   name        String
   slug        String        @unique
   description String?
-  brandId     String        @map("brand_id")
-  categoryId  String        @map("category_id")
+  brandId     String        @map("brand_id") @db.Uuid
+  categoryId  String        @map("category_id") @db.Uuid
   basePrice   Int           @map("base_price") // Hiển thị "Từ xxx VNĐ"
   status      ProductStatus @default(DRAFT)
   isFeatured  Boolean       @default(false) @map("is_featured")
@@ -207,13 +214,13 @@ model Product {
   @@index([brandId])
   @@index([categoryId])
   @@index([status])
-  @@index([slug])
+  @@index([isFeatured])
   @@map("products")
 }
 
 model ProductColor {
-  id        String @id @default(uuid())
-  productId String @map("product_id")
+  id        String @id @default(uuid()) @db.Uuid
+  productId String @map("product_id") @db.Uuid
 
   name      String // e.g. "University Red", "Triple White"
   colorCode String? @map("color_code") // hex e.g. "#FF0000" cho color swatch trên UI
@@ -230,9 +237,9 @@ model ProductColor {
 }
 
 model ProductVariant {
-  id        String @id @default(uuid())
-  productId String @map("product_id")
-  colorId   String @map("color_id")
+  id        String @id @default(uuid()) @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  colorId   String @map("color_id") @db.Uuid
 
   size           String
   sku            String @unique // e.g. "NK-AF1-WHT-42"
@@ -255,8 +262,8 @@ model ProductVariant {
 }
 
 model ProductImage {
-  id      String @id @default(uuid())
-  colorId String @map("color_id")
+  id      String @id @default(uuid()) @db.Uuid
+  colorId String @map("color_id") @db.Uuid
 
   url String
   alt String?
@@ -274,24 +281,41 @@ model ProductImage {
 // SHOPPING
 //////////////////////
 
-model CartItem {
-  id        String         @id @default(uuid())
-  userId    String         @map("user_id")
-  variantId String         @map("variant_id")
-  quantity  Int            @default(1)
-  createdAt DateTime       @default(now()) @map("created_at")
-  updatedAt DateTime       @updatedAt @map("updated_at")
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+model Cart {
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String? @unique @map("user_id") @db.Uuid // Có thể null với Guest
+  sessionId String? @unique @map("session_id") // Dùng cho Guest (lưu cookie)
 
-  @@unique([userId, variantId])
+  user  User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sessionId])
+  @@map("carts")
+}
+
+model CartItem {
+  id        String @id @default(uuid()) @db.Uuid
+  cartId    String @map("cart_id") @db.Uuid
+  variantId String @map("variant_id") @db.Uuid
+  quantity  Int    @default(1)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  cart    Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, variantId])
   @@map("cart_items")
 }
 
 model WishlistItem {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  productId String   @map("product_id")
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  productId String   @map("product_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -305,9 +329,8 @@ model WishlistItem {
 //////////////////////
 
 model Order {
-  id          String      @id @default(uuid())
-  userId      String      @map("user_id")
-  addressId   String      @map("address_id")
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String      @map("user_id") @db.Uuid
   orderNumber String      @unique @map("order_number")
   status      OrderStatus @default(PENDING)
   subtotal    Int
@@ -316,25 +339,42 @@ model Order {
   total       Int
   note        String?
 
-  user            User    @relation(fields: [userId], references: [id])
-  shippingAddress Address @relation(fields: [addressId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  items   OrderItem[]
-  payment Payment?
+  items           OrderItem[]
+  payment         Payment[]
+  shippingAddress OrderAddress?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([userId])
   @@index([status])
-  @@index([orderNumber])
   @@map("orders")
 }
 
+model OrderAddress {
+  id      String @id @default(uuid()) @db.Uuid
+  orderId String @unique @map("order_id") @db.Uuid
+
+  fullName String @map("full_name")
+  phone    String
+  street   String
+  ward     String
+  district String
+  city     String
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("order_addresses")
+}
+
 model OrderItem {
-  id          String @id @default(uuid())
-  orderId     String @map("order_id")
-  variantId   String? @map("variant_id")
+  id          String  @id @default(uuid()) @db.Uuid
+  orderId     String  @map("order_id") @db.Uuid
+  variantId   String? @map("variant_id") @db.Uuid
   productName String  @map("product_name") // snapshot at time of order
   color       String
   size        String
@@ -347,6 +387,7 @@ model OrderItem {
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([orderId])
   @@map("order_items")
 }
 
@@ -355,16 +396,24 @@ model OrderItem {
 //////////////////////
 
 model Payment {
-  id      String @id @default(uuid())
-  orderId String @unique @map("order_id")
+  id      String @id @default(uuid()) @db.Uuid
+  orderId String @map("order_id") @db.Uuid
 
   method PaymentMethod
   status PaymentStatus
 
-  transactionId String? @map("transaction_id")
+  amount Int // Số tiền thực tế giao dịch qua cổng
 
-  order Order @relation(fields: [orderId], references: [id])
+  transactionId String? @unique @map("transaction_id")
 
+  paidAt    DateTime? @map("paid_at") // Thời điểm chuyển status sang SUCCESS
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
   @@map("payments")
 }
 
@@ -373,10 +422,10 @@ model Payment {
 //////////////////////
 
 model Review {
-  id          String  @id @default(uuid())
-  userId      String  @map("user_id")
-  productId   String  @map("product_id")
-  orderItemId String? @unique @map("order_item_id") // có giá trị = verified purchase
+  id          String  @id @default(uuid()) @db.Uuid
+  userId      String  @map("user_id") @db.Uuid
+  productId   String  @map("product_id") @db.Uuid
+  orderItemId String? @unique @map("order_item_id") @db.Uuid // có giá trị = verified purchase
 
   rating     Int
   comment    String?
@@ -384,11 +433,38 @@ model Review {
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  orderItem OrderItem? @relation(fields: [orderItemId], references: [id])
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@unique([userId, productId])
+  @@index([productId])
   @@map("reviews")
+}
+
+//////////////////////
+// AUDIT LOG
+//////////////////////
+
+model AuditLog {
+  id     String  @id @default(uuid()) @db.Uuid
+  userId String? @map("user_id") @db.Uuid // Người thực hiện hành động (có thể null nếu là System cronjob)
+
+  action   ActionType
+  entity   String // Tên bảng (VD: "ProductVariant", "Order", "User")
+  entityId String     @map("entity_id") @db.Uuid // ID của record bị tác động
+
+  oldValues Json? @map("old_values") // Dữ liệu trước khi sửa (Lưu JSON)
+  newValues Json? @map("new_values") // Dữ liệu sau khi sửa (Lưu JSON)
+
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

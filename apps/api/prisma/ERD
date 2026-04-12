@@ -1,0 +1,404 @@
+Project SneakFreak {
+  database_type: 'PostgreSQL'
+  Note: 'Database schema for SneakFreak E-commerce website'
+}
+
+///////////////////////////////////////
+// ENUMS
+///////////////////////////////////////
+
+Enum RoleName {
+  OWNER
+  STAFF
+  CUSTOMER
+}
+
+Enum OrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPING
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+Enum PaymentMethod {
+  COD
+  MOMO
+}
+
+Enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+Enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+Enum ActionType {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN_FAILED
+}
+
+////////////////////////////////
+// RBAC
+////////////////////////////////
+
+Table roles {
+  id uuid [pk]
+  name RoleName [unique]
+  created_at timestamp [default: `now()`]
+}
+
+Table permissions {
+  id uuid [pk]
+  name varchar [unique]
+}
+
+Table role_permissions {
+  role_id uuid
+  permission_id uuid
+
+  indexes {
+    (role_id, permission_id) [pk]
+  }
+}
+
+////////////////////////////////
+// User
+////////////////////////////////
+
+Table users {
+  id uuid [pk]
+  email varchar [unique]
+  password varchar
+  full_name varchar
+  phone varchar [null]
+  avatar varchar [null]
+  role_id uuid
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+}
+
+////////////////////////////////
+// Address
+////////////////////////////////
+
+Table addresses {
+  id uuid [pk]
+  user_id uuid
+  full_name varchar
+  phone varchar
+  street varchar
+  ward varchar
+  district varchar
+  city varchar
+  is_default boolean [default: false]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+}
+
+////////////////////////////////
+// Product
+////////////////////////////////
+
+Table categories {
+  id uuid [pk]
+  name varchar
+  slug varchar [unique]
+  description varchar [null]
+  image varchar [null]
+  parent_id uuid [null]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+}
+
+Table brands {
+  id uuid [pk]
+  name varchar
+  slug varchar [unique]
+  logo varchar [null]
+  description varchar [null]
+  is_active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+}
+
+Table products {
+  id uuid [pk]
+  name varchar
+  slug varchar [unique]
+  description varchar [null]
+  brand_id uuid
+  category_id uuid
+  base_price integer
+  status ProductStatus [default: 'DRAFT']
+  is_featured boolean [default: false]
+  total_sold integer [default: 0]
+  avg_rating float [default: 0]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+
+  indexes {
+    brand_id
+    category_id
+    status
+    is_featured
+  }
+}
+
+Table product_colors {
+  id uuid [pk]
+  product_id uuid
+  name varchar
+  color_code varchar [null]
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (product_id, name) [unique]
+    product_id
+  }
+}
+
+Table product_variants {
+  id uuid [pk]
+  product_id uuid
+  color_id uuid
+  size varchar
+  sku varchar [unique]
+  price integer
+  compare_at_price integer [null]
+  stock integer [default: 0]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+
+  indexes {
+    (color_id, size) [unique]
+    product_id
+    color_id
+  }
+}
+
+Table product_images {
+  id uuid [pk]
+  color_id uuid
+  url varchar
+  alt varchar [null]
+  sort_order integer [default: 0]
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    color_id
+  }
+}
+
+////////////////////////////////
+// SHOPPING: CART & WISHLIST
+////////////////////////////////
+
+Table carts {
+  id uuid [pk]
+  user_id uuid [unique, null] // Nullable cho Guest, Unique vì 1 User chỉ có 1 Cart
+  session_id varchar [unique, null] // Dùng cho Guest
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt']
+
+  indexes {
+    session_id
+  }
+}
+
+Table cart_items {
+  id uuid [pk]
+  cart_id uuid
+  variant_id uuid
+  quantity integer [default: 1]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+
+  indexes {
+    (cart_id, variant_id) [unique]
+  }
+}
+
+Table wishlist_items {
+  id uuid [pk]
+  user_id uuid
+  product_id uuid
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (user_id, product_id) [unique]
+  }
+}
+
+////////////////////////////////
+// ORDER
+////////////////////////////////
+
+Table orders {
+  id uuid [pk]
+  user_id uuid
+  order_number varchar [unique]
+  status OrderStatus [default: 'PENDING']
+  subtotal integer
+  shipping_fee integer [default: 0]
+  discount integer [default: 0]
+  total integer
+  note varchar [null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+
+  indexes {
+    user_id
+    status
+  }
+}
+
+Table order_addresses {
+  id uuid [pk]
+  order_id uuid [unique]
+  full_name varchar
+  phone varchar
+  street varchar
+  ward varchar
+  district varchar
+  city varchar
+  created_at timestamp [default: `now()`]
+}
+
+Table order_items {
+  id uuid [pk]
+  order_id uuid
+  variant_id uuid [null]
+  product_name varchar
+  color varchar
+  size varchar
+  quantity integer
+  price integer
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    order_id
+  }
+}
+
+////////////////////////////////
+// PAYMENT
+////////////////////////////////
+
+Table payments {
+  id uuid [pk]
+  order_id uuid
+  method PaymentMethod
+  status PaymentStatus
+  amount integer
+  transaction_id varchar [unique, null]
+
+  paid_at timestamp [null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+
+  indexes {
+    order_id
+    status // Dùng cho cron retry payment, admin filter
+  }
+}
+
+////////////////////////////////
+// REVIEW
+////////////////////////////////
+
+Table reviews {
+  id uuid [pk]
+  user_id uuid
+  product_id uuid
+  order_item_id uuid [unique, null]
+  rating integer [note: 'CHECK (rating >= 1 AND rating <= 5)']
+  comment varchar [null]
+  is_approved boolean [default: false]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [note: '@updatedAt - Auto managed by Prisma']
+
+  indexes {
+    product_id
+  }
+}
+
+////////////////////////////////
+// AUDIT LOG
+////////////////////////////////
+
+Table audit_logs {
+  id uuid [pk]
+  user_id uuid [null]
+  action ActionType // CREATE, UPDATE, DELETE
+  entity varchar
+  entity_id uuid
+  old_values json [null]
+  new_values json [null]
+  ip_address varchar [null]
+  user_agent varchar [null]
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (entity, entity_id)
+    created_at
+  }
+}
+///////////////////////////////////////
+// RELATIONSHIPS
+///////////////////////////////////////
+
+// RBAC
+Ref: users.role_id > roles.id
+
+Ref: role_permissions.role_id > roles.id
+Ref: role_permissions.permission_id > permissions.id
+
+// User & Address
+Ref: addresses.user_id > users.id [delete: cascade]
+
+// Product structure
+Ref: categories.parent_id > categories.id
+
+Ref: products.brand_id > brands.id
+Ref: products.category_id > categories.id
+
+Ref: product_colors.product_id > products.id [delete: cascade]
+Ref: product_variants.product_id > products.id [delete: cascade]
+Ref: product_variants.color_id > product_colors.id [delete: cascade]
+Ref: product_images.color_id > product_colors.id [delete: cascade]
+
+// Shopping
+Ref: carts.user_id - users.id [delete: cascade] // 1-1: Mỗi user có tối đa 1 giỏ hàng
+Ref: cart_items.cart_id > carts.id [delete: cascade]
+Ref: cart_items.variant_id > product_variants.id [delete: cascade]
+
+Ref: wishlist_items.user_id > users.id [delete: cascade]
+Ref: wishlist_items.product_id > products.id [delete: cascade]
+
+// Orders
+Ref: orders.user_id > users.id [delete: restrict]
+Ref: order_addresses.order_id - orders.id [delete: cascade] // 1-1 Snapshot
+Ref: order_items.order_id > orders.id [delete: cascade]
+Ref: order_items.variant_id > product_variants.id [delete: set null]
+
+// Payments
+Ref: payments.order_id > orders.id [delete: cascade] // 1-to-1 relationship
+
+// Reviews
+Ref: reviews.user_id > users.id [delete: cascade]
+Ref: reviews.product_id > products.id [delete: cascade]
+Ref: reviews.order_item_id - order_items.id // 1-to-1 relationship
+
+// Audit logs
+Ref: audit_logs.user_id > users.id [delete: set null]
