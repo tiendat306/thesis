@@ -4,8 +4,7 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  // output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -157,7 +156,7 @@ model Category {
   slug        String  @unique
   description String?
   image       String?
-
+  publicId    String?    @map("public_id")
   parentId String?    @map("parent_id") @db.Uuid
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
@@ -176,6 +175,7 @@ model Brand {
   name        String
   slug        String  @unique
   logo        String?
+  publicId    String?    @map("public_id")
   description String?
 
   products Product[]
@@ -266,8 +266,8 @@ model ProductImage {
   colorId String @map("color_id") @db.Uuid
 
   url String
+  publicId String? @map("public_id")
   alt String?
-
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")
 

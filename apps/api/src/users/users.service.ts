@@ -5,10 +5,13 @@ import { RoleName } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
+    return this.prisma.user.findUnique({
+      where: { email },
+      include: { role: true },
+    });
   }
 
   async findById(id: string) {
